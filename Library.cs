@@ -68,7 +68,7 @@ namespace Composite_querries_via_SQLite
             }
         }
 
-        // Подключение к БД и выполнение запроса
+        // Подключение к БД и выполнение запроса без возврата таблицы
         private static void dbQuery(string query)
         {
             using (SqliteConnection connection = new SqliteConnection($"Data Source = {dbFileName}"))
@@ -79,6 +79,25 @@ namespace Composite_querries_via_SQLite
                 command.CommandText = query;
                 command.ExecuteNonQuery();
             }
+        }
+
+        // Подключение к БД и выполнение запроса с возвратом таблицы
+        private static DataTable dbQueryGetDataTable(string query)
+        {
+            SqliteDataReader reader;
+            DataTable dataTable = new DataTable();
+            string commandText = query;
+
+            using (SqliteConnection connection = new SqliteConnection($"Data Source = {dbFileName}"))
+            {
+                connection.Open();
+                SqliteCommand command = new SqliteCommand();
+                command.Connection = connection;
+                command.CommandText = commandText;
+                reader = command.ExecuteReader();
+                dataTable.Load(reader);
+            }
+            return dataTable;
         }
 
         // Внесение данных в таблицу "Books"
@@ -146,9 +165,8 @@ namespace Composite_querries_via_SQLite
         public static void ShowMostPopularAuthor()
         {
 
-            SqliteDataReader reader;
             DataTable dataTable = new DataTable();
-            string commandText = @" -- Подсчёт книг выданных каждому автору
+            string query = @" -- Подсчёт книг выданных каждому автору
                                     SELECT AuthorName, count(AuthorName) as 'NumberOfBorrowings'
                                     FROM(
                                         --Выборка книг, выданных за последний год
@@ -165,23 +183,16 @@ namespace Composite_querries_via_SQLite
                                     ORDER BY NumberOfBorrowings DESC
                                     -- Берём только первую запись с наибольшим числом выдач
                                     LIMIT 1";
-            
-            using (SqliteConnection connection = new SqliteConnection($"Data Source = {dbFileName}"))
-            {
-                connection.Open();
-                SqliteCommand command = new SqliteCommand();
-                command.Connection = connection;
-                command.CommandText = commandText;
-                reader = command.ExecuteReader();
-                dataTable.Load(reader);
-            }
+
+            // Получение таблицы с выполненным запросом
+            dataTable = dbQueryGetDataTable(query);
 
             // Проверка на наличие записей
             if (dataTable.Rows.Count != 0)
             {
                 string authorName = dataTable.Rows[0][0].ToString();
                 int numberOfBorrowings = Convert.ToInt32(dataTable.Rows[0][1]);
-                Console.WriteLine($"Самый популярный автор: {authorName}\nКоличество выдач его книг за последний год: {numberOfBorrowings}");
+                Console.WriteLine($"Самый популярный автор: {authorName}\nКоличество выдач его книг за последний год: {numberOfBorrowings}\n\n\n");
             }
             else
             {
@@ -190,9 +201,51 @@ namespace Composite_querries_via_SQLite
         }
 
         // Вывод самого злостного читателя и количество взятых им книг
+        // "Злостный читатель" - тот, кто в среднем дольше всего просрочивает книгу.
+        // Подразумевается, что книга выдаётся на 30 дней, далее считаются дни просрочки
+        // Если студент сдал книгу вовремя, то значение просрочки считается равном нулю
         public static void ShowMostSpitefulReader()
         {
+            // Выборка имён студентов, дат взятия  ими книг и дат возврата, если есть
+            string query = @"-- Вывод средних значений просрочки и выбор максимального значения
+                            SELECT ReaderName, avg(Overdue) as 'AverageOverdue'
+                            FROM(
+                                --Вывод тех, кто не просрочил со сдачей книги
+                                SELECT ReaderName, (Difference - 30) * 0 as 'Overdue'
+                                FROM(
+                                    --Вывод имя и разницы между датой выдачи и возврата(если книга не просрочена, то значение равно 0)
+                                    SELECT ReaderName, DateOfTaking, ReturnDate, ifnull(julianday(ReturnDate) - julianday(DateOfTaking), 0) as 'Difference'
+                                    FROM BorrowedBooks
+                                    )
+                                WHERE Overdue <= 0
 
+                                UNION
+
+                                -- Вывод тех, кто просрочил со сдачей книги
+                                SELECT ReaderName, Difference - 30 as 'Overdue'
+                                FROM(
+                                    --Вывод имя и разницы между датой выдачи и возврата(если книга не просрочена, то значение равно 0)
+                                    SELECT ReaderName, DateOfTaking, ReturnDate, ifnull(julianday(ReturnDate) - julianday(DateOfTaking), 0) as 'Difference'
+                                    FROM BorrowedBooks
+                                    )
+                                WHERE Overdue > 0
+                                )
+                            GROUP BY ReaderName
+                            ORDER BY AverageOverdue DESC
+                            LIMIT 1";
+
+            DataTable dataTable = dbQueryGetDataTable(query);
+
+            if (dataTable.Rows.Count > 0)
+            {
+                string spitefulReader = dataTable.Rows[0][0].ToString();
+                double averageOverdue = Convert.ToDouble(dataTable.Rows[0][1]);
+                Console.WriteLine($"Самый 'злостный' читатель: {spitefulReader}\nВ среднем просрочивает книгу на {averageOverdue} дней\n\n\n");
+            }
+            else
+            {
+                throw new Exception("No readers, who have expired a book");
+            }
         }
 
     }
