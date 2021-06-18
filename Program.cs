@@ -34,7 +34,7 @@ namespace Composite_querries_via_SQLite
             Library.ShowData("Books");
             Library.ShowData("BookExemplars");
             Library.ShowData("BorrowedBooks");
-
+            Library.ShowMostPopularAuthor();
         }
     }
 }
