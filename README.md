@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS BorrowedBooks (
 ```
 
 
-2. SQL-запрос, возвращающий самого популярного автора за год:
+2. SQL-запрос, возвращающий самого популярного автора за год (считается как <сегодняшняя дата> - <365 дней>):
 ```SQL
 SELECT AuthorName, count(AuthorName) as 'NumberOfBorrowings'
 FROM(
